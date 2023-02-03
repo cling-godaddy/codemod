@@ -24,7 +24,7 @@ export default function (file: FileInfo, api: API) {
     // no proxyquire declaration; add it
 
     // remove the existing Component import
-    let relativePath;
+    let relativePath: string;
     root
       .find(j.ImportDeclaration)
       .filter(path => {
@@ -34,8 +34,7 @@ export default function (file: FileInfo, api: API) {
         }));
       })
       .forEach(path => {
-        // console.log(path.node)
-        relativePath = path.node.source.value;
+        relativePath = String(path.node.source.value);
         path.replace();
       })
 
@@ -66,7 +65,7 @@ export default function (file: FileInfo, api: API) {
                   j.callExpression(
                     j.identifier(pqName),
                     [
-                      j.stringLiteral(relativePath),
+                      j.stringLiteral(relativePath!),
                       j.objectExpression([
 
                       ])
