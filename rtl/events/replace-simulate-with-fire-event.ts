@@ -1,20 +1,49 @@
-import { API, CallExpression, FileInfo, Literal, MemberExpression } from 'jscodeshift';
+import { API, FileInfo, ImportSpecifier, Literal, MemberExpression } from 'jscodeshift';
 
 export default function (file: FileInfo, api: API) {
   const j = api.jscodeshift;
   const root = j(file.source);
 
-  root
-    // .find(j.ExpressionStatement, {
-    //   expression: {
-    //     callee: {
-    //       property: {
-    //         name: 'simulate'
-    //       }
-    //     }
-    //   }
-    // })
+  // ensure we have createEvent and fireEvent imported
+  const importsToAdd = new Set(['createEvent', 'fireEvent'])
+  const isRtlImported = !!root
+    .find(j.ImportDeclaration, {
+      source: {
+        value: '@testing-library/react'
+      }
+    })
+    .length;
 
+  if (isRtlImported) {
+    root
+      .find(j.ImportDeclaration, {
+        source: {
+          value: '@testing-library/react'
+        }
+      })
+      .forEach(path => {
+        const specifiers = path.node.specifiers || [];
+        specifiers.forEach(specifier => {
+          const name = (specifier as ImportSpecifier).imported.name;
+          if (importsToAdd.has(name)) {
+            importsToAdd.delete(name)
+          }
+        });
+
+        importsToAdd.forEach(name => specifiers.push(j.importSpecifier(j.identifier(name))))
+      });
+  }
+  else {
+    root
+      .find(j.ImportDeclaration)
+      .filter((_, i) => i === 0)
+      .insertBefore(j.importDeclaration(
+        Array.from(importsToAdd).map((name: string) => j.importSpecifier(j.identifier(name))),
+        j.stringLiteral('@testing-library/react')
+      ));
+  }
+
+  root
     .find(j.CallExpression, {
       callee: {
         property: {
@@ -24,14 +53,8 @@ export default function (file: FileInfo, api: API) {
     })
     .forEach(path => {
       const eventName = (path.node.arguments[0] as Literal).value;
-      // console.log(path.node.callee);
-      // console.log(path.node.callee.object);
       const object = (path.node.callee as MemberExpression).object;
 
-      // const object = (path.node.expression as CallExpression).callee.object
-
-      // const callee = path.node.callee;
-      // console.log({ eventName})
       switch (eventName) {
         case 'click':
           const clickEventDeclaration = j.variableDeclaration(
@@ -56,25 +79,16 @@ export default function (file: FileInfo, api: API) {
             ]
           );
 
-          path.replace()
-          // path.replace(clickEventDeclaration)
-          // path.insertBefore(clickEventDeclaration)
-          // path.unshift(clickEventDeclaration)
-
-          // path.replace(
-          //   j.callExpression(
-          //     j.identifier('fireEvent'),
-          //     [object, j.newExpression(
-          //       j.identifier('MouseEvent'),
-          //       [
-          //         j.objectExpression([
-          //           j.objectProperty(j.identifier('bubbles'), j.booleanLiteral(true)),
-          //           j.objectProperty(j.identifier('cancelable'), j.booleanLiteral(true))
-          //         ])
-          //       ]
-          //     )]
-          //   )
-          // )
+          path.parentPath.insertBefore(clickEventDeclaration)
+          path.replace(
+            j.callExpression(
+              j.identifier('fireEvent'),
+              [
+                object,
+                j.identifier('clickEvent')
+              ]
+            )
+          );
           break;
 
         case 'keydown':
