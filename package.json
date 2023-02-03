@@ -1,0 +1,28 @@
+{
+  "name": "codemod",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cling-godaddy/codemod.git"
+  },
+  "author": "Charles Ling",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cling-godaddy/codemod/issues"
+  },
+  "homepage": "https://github.com/cling-godaddy/codemod#readme",
+  "dependencies": {
+    "jscodeshift": "^0.14.0",
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@types/jscodeshift": "^0.11.6",
+    "@types/lodash": "^4.14.191",
+    "@types/node": "^18.11.18"
+  }
+}
