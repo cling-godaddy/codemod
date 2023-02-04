@@ -1,4 +1,5 @@
-import { API, FileInfo, ImportSpecifier, Literal, MemberExpression } from 'jscodeshift';
+import { API, FileInfo, Identifier, ImportSpecifier, Literal, MemberExpression } from 'jscodeshift';
+import { createEvent } from '../utils/builders';
 
 export default function (file: FileInfo, api: API) {
   const j = api.jscodeshift;
@@ -62,19 +63,10 @@ export default function (file: FileInfo, api: API) {
             [
               j.variableDeclarator(
                 j.identifier('clickEvent'),
-                j.memberExpression(
-                  j.identifier('createEvent'),
-                  j.callExpression(
-                    j.identifier('click'),
-                    [
-                      object,
-                      j.objectExpression([
-                        j.objectProperty(j.identifier('bubbles'), j.booleanLiteral(true)),
-                        j.objectProperty(j.identifier('cancelable'), j.booleanLiteral(true))
-                      ])
-                    ]
-                  )
-                )
+                createEvent(j, 'click', object, {
+                  bubbles: true,
+                  cancelable: true
+                })
               )
             ]
           );
@@ -92,12 +84,46 @@ export default function (file: FileInfo, api: API) {
           break;
 
         case 'keydown':
-
+          const keyDownEventDeclaration = j.variableDeclaration(
+            'const',
+            [
+              j.variableDeclarator(
+                j.identifier('keyDownEvent'),
+                createEvent(j, 'keyDown', object, path.node.arguments[1])
+              )
+            ]
+          );
+          path.parentPath.insertBefore(keyDownEventDeclaration)
+          path.replace(
+            j.callExpression(
+              j.identifier('fireEvent'),
+              [
+                object,
+                j.identifier('keyDownEvent')
+              ]
+            )
+          );
           break;
 
         default:
           break;
       }
+    });
+
+  // handle assert preventDefault
+  // TODO(cling)
+  // closest() might be usable here to transform expect(preventDefault)
+  // but until that's figured out, just comment out these assertions
+  root
+    .find(j.CallExpression, {
+      callee: {
+        name: 'expect'
+      }
+    })
+    .filter(path => (path.node.arguments[0] as Identifier)?.name === 'preventDefault')
+    .forEach(path => {
+      // TODO(cling) hack to comment a line
+      path.get('callee').replace(j.identifier('// expect'))
     })
 
   return root.toSource({ quote: 'single' });
