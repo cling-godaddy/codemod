@@ -192,8 +192,8 @@ export default function (file: FileInfo, api: API) {
                     j.jsxOpeningElement.from({
                       name: j.jsxIdentifier('div'),
                       attributes: [
-                        j.jsxAttribute(j.jsxIdentifier('data-aid'), j.stringLiteral(component)),
-                        j.jsxSpreadAttribute(j.callExpression(j.identifier('normalizeProps'), [j.identifier('props')]))
+                        j.jsxSpreadAttribute(j.callExpression(j.identifier('normalizeProps'), [j.identifier('props')])),
+                        j.jsxAttribute(j.jsxIdentifier('data-aid'), j.stringLiteral(component))
                       ],
                       selfClosing: true
                     })
