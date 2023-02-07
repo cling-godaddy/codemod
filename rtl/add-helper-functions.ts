@@ -3,8 +3,17 @@ import { API, FileInfo, Identifier, Node } from 'jscodeshift';
 // Adds the following helper functions to help transformation:
 
 // function normalizeAttribute(attr) {
-//   return ['data'].concat(words(attr).map(toLower)).join('-');
+//   const exceptions = [...];
+//   return exceptions.includes(attr) ? attr : ['data'].concat(words(attr).map(toLower)).join('-');
 // }
+
+// common Element attributes we don't want to prefix with data-
+const ATTRIBUTE_EXCEPTIONS = [
+  'alt',
+  'class',
+  'id',
+  'src'
+];
 
 // function normalizeProps(props) {
 //   const result = {};
@@ -169,30 +178,52 @@ export default function (file: FileInfo, api: API) {
       j.identifier('normalizeAttribute'),
       [j.identifier('attr')],
       j.blockStatement([
-        // return ['data'].concat(words(attr).map(toLower)).join('-');
-        j.returnStatement(
-          j.memberExpression(
-            j.memberExpression(
-              j.arrayExpression([j.stringLiteral('data')]),
-              j.callExpression(
-                j.identifier('concat'),
-                [
-                  j.memberExpression(
-                    j.callExpression(
-                      lodashIdentifiersMap['words']!,
-                      [j.identifier('attr')]
-                    ),
-                    j.callExpression(
-                      j.identifier('map'),
-                      [lodashIdentifiersMap['toLower']!],
-                    )
-                  )
-                ]
+        // const exceptions = [...];
+        j.variableDeclaration(
+          'const',
+          [
+            j.variableDeclarator(
+              j.assignmentPattern(
+                j.identifier('exceptions'),
+                j.arrayExpression(ATTRIBUTE_EXCEPTIONS.map(attr => j.stringLiteral(attr)))
               )
-            ),
+            )
+          ]
+        ),
+        // return exceptions.includes(attr) ? attr : ['data'].concat(words(attr).map(toLower)).join('-');
+        j.returnStatement(
+          j.conditionalExpression(
             j.callExpression(
-              j.identifier('join'),
-              [j.stringLiteral('-')]
+              j.memberExpression(
+                j.identifier('exceptions'),
+                j.identifier('includes')
+              ),
+              [j.identifier('attr')]
+            ),
+            j.identifier('attr'),
+            j.memberExpression(
+              j.memberExpression(
+                j.arrayExpression([j.stringLiteral('data')]),
+                j.callExpression(
+                  j.identifier('concat'),
+                  [
+                    j.memberExpression(
+                      j.callExpression(
+                        lodashIdentifiersMap['words']!,
+                        [j.identifier('attr')]
+                      ),
+                      j.callExpression(
+                        j.identifier('map'),
+                        [lodashIdentifiersMap['toLower']!],
+                      )
+                    )
+                  ]
+                )
+              ),
+              j.callExpression(
+                j.identifier('join'),
+                [j.stringLiteral('-')]
+              )
             )
           )
         )
