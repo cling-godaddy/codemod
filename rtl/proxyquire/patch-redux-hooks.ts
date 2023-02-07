@@ -1,16 +1,13 @@
 import { API, FileInfo, Identifier, ObjectExpression, Property } from 'jscodeshift';
+import { withHelpers } from '../helpers';
 
 export default function (file: FileInfo, api: API) {
-  const j = api.jscodeshift;
+  const j = withHelpers(api.jscodeshift);
   const root = j(file.source);
 
-  let pqName;
+  let pqName = '';
   root
-    .find(j.ImportDeclaration, {
-      source: {
-        value: 'proxyquire'
-      }
-    })
+    .findImportDeclarationsBySource('proxyquire')
     .forEach(path => {
       const specifiers = path.node.specifiers || [];
       if (specifiers.length > 1 || specifiers[0].type !== 'ImportDefaultSpecifier') {
@@ -21,17 +18,13 @@ export default function (file: FileInfo, api: API) {
     })
 
   // ensure PQ is actually used
-  if (!root.find(j.CallExpression, { callee: { name: pqName } }).length) {
+  if (!root.findCallExpressions(pqName).length) {
     // TODO(cling)
     throw new Error('proxyquire is imported but not used: ' + file.path);
   }
 
   root
-    .find(j.CallExpression, {
-      callee: {
-        name: pqName
-      }
-    })
+    .findCallExpressions(pqName)
     .forEach(path => {
       const stubs = path.node.arguments[1] as ObjectExpression;
       (stubs.properties as Property[]).forEach(property => {

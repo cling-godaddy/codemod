@@ -1,18 +1,13 @@
 import { API, FileInfo } from 'jscodeshift';
+import { withHelpers } from '../helpers';
 import { isComponentName } from '../utils/selectors';
 
 export default function (file: FileInfo, api: API) {
-  const j = api.jscodeshift;
+  const j = withHelpers(api.jscodeshift);
   const root = j(file.source);
 
   root
-    .find(j.CallExpression, {
-      callee: {
-        property: {
-          name: 'find'
-        }
-      }
-    })
+    .findCallExpressionProperties('find')
     .forEach(path => {
       // TODO(cling) handle compound selectors
       const args = path.node.arguments;

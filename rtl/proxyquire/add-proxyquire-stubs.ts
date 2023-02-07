@@ -1,11 +1,14 @@
 import { accessSync, constants, readFileSync } from 'fs';
 import { API, FileInfo } from 'jscodeshift';
+import { withHelpers } from '../helpers';
 
 import { isComponentName } from '../utils/selectors';
 
 function getSourceFilePath(currentFile: FileInfo): string {
   // TODO(cling)
-  // if .find() calls the literal Components, we can use the imported path in this file instead of guessing
+  // if .find() calls the actual Component, e.g. find(Component) rather than find('Component'),
+  // we can use the path the import declaration uses instead of searching for it in the source file
+
   // see if we can find the file in /src
   const pathTokens = currentFile.path.split('/');
   const fileName = pathTokens.at(-1)?.split('.')[0];
@@ -37,11 +40,11 @@ function getSourceFilePath(currentFile: FileInfo): string {
 
 export const parser = 'flow';
 export default function (file: FileInfo, api: API) {
-  const j = api.jscodeshift;
+  const j = withHelpers(api.jscodeshift);
   const root = j(file.source);
 
   const componentName = file.path.split('/').at(-1)?.split('.')[0]!;
-  let pqName;
+  let pqName = '';
 
   // ensure proxyquire is imported
   if (!root.find(
@@ -52,8 +55,9 @@ export default function (file: FileInfo, api: API) {
       }
     }).length
   ) {
-    // TODO(cling) if the query targets only refer to styled components, this may not be needed
     // no proxyquire declaration; add it
+
+    // TODO(cling) if the query targets only refer to styled components, this may not be needed
 
     // remove the existing Component import
     let relativePath: string;
@@ -70,21 +74,19 @@ export default function (file: FileInfo, api: API) {
         path.replace();
       })
 
-    root.get().node.program.body.unshift(
-      j.importDeclaration(
+    root
+      .find(j.ImportDeclaration)
+      .filter((_, i) => i === 0)
+      .insertAfter(j.importDeclaration(
         [j.importDefaultSpecifier(j.identifier('proxyquire'))],
         j.stringLiteral('proxyquire')
-      )
-    );
+      ));
+
     pqName = 'proxyquire';
 
     // insert the proxyquire stub into the body of the top level block
     root
-      .find(j.CallExpression, {
-        callee: {
-          name: 'describe'
-        }
-      })
+      .findCallExpressions('describe')
       .get(0).node.arguments[1].body.body
       .unshift(
         j.variableDeclaration(
@@ -128,7 +130,8 @@ export default function (file: FileInfo, api: API) {
     })
 
   // ensure PQ is actually used
-  if (!root.find(j.CallExpression, { callee: { name: pqName } }).length) {
+
+  if (!root.findCallExpressions(pqName).length) {
     // TODO(cling)
     throw new Error('proxyquire is imported but not used: ' + file.path);
   }
@@ -137,13 +140,7 @@ export default function (file: FileInfo, api: API) {
   // check all instances of .find()
   const queriedComponents = new Set<string>();
   root
-    .find(j.CallExpression, {
-      callee: {
-        property: {
-          name: 'find'
-        }
-      }
-    })
+    .findCallExpressionProperties('find')
     .forEach(path => {
       const args = path.node.arguments;
       if (args.length === 1 && args[0].type === 'Literal' && isComponentName(args[0]?.value + '')) {
@@ -167,11 +164,7 @@ export default function (file: FileInfo, api: API) {
 
   // stub the queried components with proxyquire
   root
-    .find(j.CallExpression, {
-      callee: {
-        name: pqName
-      }
-    })
+    .findCallExpressions(pqName)
     .forEach(path => {
       const args = path.node.arguments;
       if (args.length !== 2 || args[1].type !== 'ObjectExpression') {

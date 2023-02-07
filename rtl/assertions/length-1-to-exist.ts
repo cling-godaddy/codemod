@@ -1,8 +1,9 @@
 import { API, FileInfo, Literal, MemberExpression } from 'jscodeshift';
+import { withHelpers } from '../helpers';
 
 // Change expect(foo).to.have.length(1) to expect(foo).to.exist;
 export default function (file: FileInfo, api: API) {
-  const j = api.jscodeshift;
+  const j = withHelpers(api.jscodeshift);
   const root = j(file.source);
 
   root.find(j.CallExpression, {

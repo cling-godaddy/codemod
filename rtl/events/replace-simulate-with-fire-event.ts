@@ -1,33 +1,29 @@
 import { API, FileInfo, Identifier, ImportSpecifier, Literal, MemberExpression } from 'jscodeshift';
+import { withHelpers } from '../helpers';
 import { createEvent } from '../utils/builders';
-import { isFunctionUsed } from '../utils/functions';
+import { makeComment } from '../utils/comments';
 
 export default function (file: FileInfo, api: API) {
-  const j = api.jscodeshift;
+  const j = withHelpers(api.jscodeshift);
   const root = j(file.source);
 
   // if no simulate(), no work needed
-  if (!isFunctionUsed(file, api, 'simulate')) {
+  const isSimulateUsed = !!root.find(j.MemberExpression, {
+    property: {
+      name: 'simulate'
+    }
+  }).length;
+  if (!isSimulateUsed) {
     return root.toSource({ quote: 'single' });
   }
 
   // ensure we have createEvent and fireEvent imported
   const importsToAdd = new Set(['createEvent', 'fireEvent'])
-  const isRtlImported = !!root
-    .find(j.ImportDeclaration, {
-      source: {
-        value: '@testing-library/react'
-      }
-    })
-    .length;
+  const isRtlImported = !!root.findImportDeclarationsBySource('@testing-library/react').length;
 
   if (isRtlImported) {
     root
-      .find(j.ImportDeclaration, {
-        source: {
-          value: '@testing-library/react'
-        }
-      })
+      .findImportDeclarationsBySource('@testing-library/react')
       .forEach(path => {
         const specifiers = path.node.specifiers || [];
         specifiers.forEach(specifier => {
@@ -38,7 +34,8 @@ export default function (file: FileInfo, api: API) {
         });
 
         importsToAdd.forEach(name => specifiers.push(j.importSpecifier(j.identifier(name))))
-      });
+      })
+      .sortByImportedName();
   }
   else {
     root
@@ -47,20 +44,32 @@ export default function (file: FileInfo, api: API) {
       .insertBefore(j.importDeclaration(
         Array.from(importsToAdd).map((name: string) => j.importSpecifier(j.identifier(name))),
         j.stringLiteral('@testing-library/react')
-      ));
+      ))
+      .sortByImportedName();
   }
 
   root
-    .find(j.CallExpression, {
-      callee: {
-        property: {
-          name: 'simulate'
-        }
-      }
-    })
+    .findCallExpressionProperties('simulate')
     .forEach(path => {
       const eventName = (path.node.arguments[0] as Literal).value;
       const object = (path.node.callee as MemberExpression).object;
+      console.log(object)
+
+      // if object is the same as 'wrapper', a.k.a. the result of render(), it's a not an Element,
+      // so we need to call wrapper.container.children[0] instead to get the top level Element
+      const target = object.type === 'Identifier' && object.name === 'wrapper'
+        ? j.memberExpression(
+          j.identifier('wrapper'),
+          j.memberExpression(
+            j.identifier('container'),
+            j.memberExpression(
+              j.identifier('children'),
+              j.literal(0)
+            ),
+            false
+          ),
+          false
+        ) : object;
 
       switch (eventName) {
         case 'click':
@@ -69,7 +78,7 @@ export default function (file: FileInfo, api: API) {
             [
               j.variableDeclarator(
                 j.identifier('clickEvent'),
-                createEvent(j, 'click', object, {
+                createEvent(j, 'click', target, {
                   bubbles: true,
                   cancelable: true
                 })
@@ -82,7 +91,7 @@ export default function (file: FileInfo, api: API) {
             j.callExpression(
               j.identifier('fireEvent'),
               [
-                object,
+                target,
                 j.identifier('clickEvent')
               ]
             )
@@ -95,7 +104,7 @@ export default function (file: FileInfo, api: API) {
             [
               j.variableDeclarator(
                 j.identifier('keyDownEvent'),
-                createEvent(j, 'keyDown', object, path.node.arguments[1])
+                createEvent(j, 'keyDown', target, path.node.arguments[1])
               )
             ]
           );
@@ -104,7 +113,7 @@ export default function (file: FileInfo, api: API) {
             j.callExpression(
               j.identifier('fireEvent'),
               [
-                object,
+                target,
                 j.identifier('keyDownEvent')
               ]
             )
@@ -116,21 +125,9 @@ export default function (file: FileInfo, api: API) {
       }
     });
 
-  // handle assert preventDefault
-  // TODO(cling)
-  // closest() might be usable here to transform expect(preventDefault)
-  // but until that's figured out, just comment out these assertions
   root
-    .find(j.CallExpression, {
-      callee: {
-        name: 'expect'
-      }
-    })
-    .filter(path => (path.node.arguments[0] as Identifier)?.name === 'preventDefault')
-    .forEach(path => {
-      // TODO(cling) hack to comment a line
-      path.get('callee').replace(j.identifier('// expect'))
-    })
+    .commentAssertions(path => (path.node.arguments[0] as Identifier)?.name === 'preventDefault')
+    .insertCommentBeforeTest(makeComment('commented out expect(preventDefault)'));
 
   return root.toSource({ quote: 'single' });
 }

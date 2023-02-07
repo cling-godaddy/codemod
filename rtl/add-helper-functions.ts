@@ -1,4 +1,5 @@
 import { API, FileInfo, Identifier, Node } from 'jscodeshift';
+import { withHelpers } from './helpers';
 
 // Adds the following helper functions to help transformation:
 
@@ -32,7 +33,7 @@ const LODASH_MODULES = [
 ];
 
 export default function (file: FileInfo, api: API) {
-  const j = api.jscodeshift;
+  const j = withHelpers(api.jscodeshift);
   const root = j(file.source);
   const body = root.get().node.program.body;
 
@@ -141,25 +142,38 @@ export default function (file: FileInfo, api: API) {
                   ],
                   j.blockStatement([
                     j.ifStatement(
-                      j.binaryExpression(
-                        '!==',
-                        j.unaryExpression('typeof', j.identifier('value')),
-                        j.stringLiteral('function')
-                      ),
-                      j.expressionStatement(
-                        j.assignmentExpression(
-                          '=',
-                          j.memberExpression(
-                            j.identifier('result'),
-                            j.callExpression(
-                              j.identifier('normalizeAttribute'),
-                              [j.identifier('key')]
-                            ),
-                            true
+                      j.binaryExpression('===', j.identifier('key'), j.stringLiteral('children')),
+                      j.returnStatement(null)
+                    ),
+
+                    j.switchStatement(
+                      j.unaryExpression('typeof', j.identifier('value')),
+                      [
+                        j.switchCase(j.stringLiteral('function'), [j.breakStatement()]),
+                        j.switchCase(j.stringLiteral('boolean'), [
+                          j.ifStatement(
+                            j.unaryExpression('!', j.identifier('value')),
+                            j.breakStatement()
+                          )
+                        ]),
+                        j.switchCase(null, [
+                          j.expressionStatement(
+                            j.assignmentExpression(
+                              '=',
+                              j.memberExpression(
+                                j.identifier('result'),
+                                j.callExpression(
+                                  j.identifier('normalizeAttribute'),
+                                  [j.identifier('key')]
+                                ),
+                                true
+                              ),
+                              j.identifier('value')
+                            )
                           ),
-                          j.identifier('value')
-                        )
-                      )
+                          j.breakStatement()
+                        ])
+                      ]
                     )
                   ])
                 )
