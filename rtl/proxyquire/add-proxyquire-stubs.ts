@@ -1,7 +1,39 @@
-import { readFileSync } from 'fs';
+import { accessSync, constants, readFileSync } from 'fs';
 import { API, FileInfo } from 'jscodeshift';
 
 import { isComponentName } from '../utils/selectors';
+
+function getSourceFilePath(currentFile: FileInfo): string {
+  // TODO(cling)
+  // if .find() calls the literal Components, we can use the imported path in this file instead of guessing
+  // see if we can find the file in /src
+  const pathTokens = currentFile.path.split('/');
+  const fileName = pathTokens.at(-1)?.split('.')[0];
+  const rootDir = pathTokens.slice(0, pathTokens.findIndex(t => t === 'test')).join('/')
+
+  const baseDir = [rootDir, 'src', ...pathTokens.slice(pathTokens.findIndex(t => t === 'client'), pathTokens.length - 1)].join('/');
+  const possibleSourceFiles = [
+    [baseDir, fileName + '.js'].join('/'),
+    [baseDir, 'index.js'].join('/')
+  ];
+
+  let sourceFile;
+  const sourceFileExists = possibleSourceFiles.some(path => {
+    try {
+      accessSync(path, constants.F_OK);
+      sourceFile = path;
+      return true;
+    } catch (err) {
+      return false;
+    }
+  });
+
+  if (!sourceFileExists || !sourceFile) {
+    throw new Error('no source file found for: ' + currentFile.path);
+  }
+
+  return sourceFile;
+}
 
 export const parser = 'flow';
 export default function (file: FileInfo, api: API) {
@@ -121,17 +153,7 @@ export default function (file: FileInfo, api: API) {
 
   // find the relative paths in the source file
   const relativePaths: { [component: string]: string } = {}
-
-  // TODO(cling)
-  // if .find() calls the literal Components, we can use the imported path in this file instead of guessing
-  // see if we can find the file in /src
-  const pathTokens = file.path.split('/');
-  const fileName = pathTokens.at(-1)?.split('.')[0];
-  const rootDir = pathTokens.slice(0, pathTokens.findIndex(t => t === 'test')).join('/')
-  // may need to tweak this depending on your repo
-  const expectedSourceFile = [rootDir, 'src', ...pathTokens.slice(pathTokens.findIndex(t => t === 'client'), pathTokens.length - 1), fileName + '.js'].join('/');
-  const source = j(readFileSync(expectedSourceFile, { encoding: 'utf8', flag: 'r' }));
-
+  const source = j(readFileSync(getSourceFilePath(file), { encoding: 'utf8', flag: 'r' }));
   source
     .find(j.ImportDeclaration)
     .forEach(path => {
