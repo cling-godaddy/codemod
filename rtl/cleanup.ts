@@ -1,4 +1,5 @@
 import { API, FileInfo } from 'jscodeshift';
+import { isFunctionUsed } from './utils/functions';
 
 const HELPER_FUNCTIONS = [
   'normalizeProps',
@@ -9,19 +10,8 @@ export default function (file: FileInfo, api: API) {
   const j = api.jscodeshift;
   const root = j(file.source);
 
-  // clean up helper functions if they're not used
-  function isFunctionUsed(name: string) {
-    return !!root
-      .find(j.CallExpression, {
-        callee: {
-          name
-        }
-      })
-      .length;
-  }
-
   HELPER_FUNCTIONS.forEach(fn => {
-    if (!isFunctionUsed(fn)) {
+    if (!isFunctionUsed(file, api, fn)) {
       root
         .find(j.FunctionDeclaration, {
           id: {

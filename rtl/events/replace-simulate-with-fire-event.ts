@@ -1,9 +1,15 @@
 import { API, FileInfo, Identifier, ImportSpecifier, Literal, MemberExpression } from 'jscodeshift';
 import { createEvent } from '../utils/builders';
+import { isFunctionUsed } from '../utils/functions';
 
 export default function (file: FileInfo, api: API) {
   const j = api.jscodeshift;
   const root = j(file.source);
+
+  // if no simulate(), no work needed
+  if (!isFunctionUsed(file, api, 'simulate')) {
+    return root.toSource({ quote: 'single' });
+  }
 
   // ensure we have createEvent and fireEvent imported
   const importsToAdd = new Set(['createEvent', 'fireEvent'])
