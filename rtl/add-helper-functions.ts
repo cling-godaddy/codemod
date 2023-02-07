@@ -11,6 +11,7 @@ import { API, FileInfo, Identifier, Node } from 'jscodeshift';
 const ATTRIBUTE_EXCEPTIONS = [
   'alt',
   'class',
+  'data-aid',
   'id',
   'src'
 ];
